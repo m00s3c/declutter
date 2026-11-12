@@ -45,4 +45,4 @@ Detected items are stored in the `declutter_seen` option. Only users with `manag
 
 ## License
 
-GPL-2.0-or-later. Built by [webmaster.sh](https://webmaster.sh).
+GPL-2.0-or-later.
