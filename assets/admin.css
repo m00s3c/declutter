@@ -6,7 +6,7 @@
 
 /* Expand / collapse all */
 .declutter-expand-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
-.declutter-expand-bar .button { margin: 0; height: 30px; min-height: 30px; line-height: 28px; }
+.declutter-expand-bar .button { margin: 0; }
 
 /* Cards */
 .declutter-section { margin: 0 0 16px; padding: 0; overflow: hidden; }
@@ -38,7 +38,7 @@
 .declutter-choice { display: flex !important; align-items: flex-start; gap: 8px; margin: 0; font-size: 13px; line-height: 1.5; color: #1d2327; }
 .declutter-options input[type="radio"],
 .declutter-options input[type="checkbox"] { margin: 3px 0 0; flex: none; }
-.declutter-options select { display: block; width: auto; max-width: 100%; min-width: 140px; height: 30px; min-height: 30px; margin: 0; padding: 0 24px 0 8px; box-sizing: border-box; vertical-align: middle; line-height: 2; }
+.declutter-options select { display: block; width: auto; max-width: 100%; min-width: 140px; margin: 0; box-sizing: border-box; vertical-align: middle; }
 .declutter-select-label { display: block; margin: 0; }
 .declutter-smart { color: #50575e; max-width: 100%; }
 .declutter-roles { display: flex; flex-wrap: wrap; gap: 8px 20px; width: 100%; box-sizing: border-box; margin: 10px 0 0; padding: 10px 14px; background: #f6f7f7; border: 1px solid #dcdcde; border-radius: 4px; }
@@ -47,14 +47,14 @@
 
 /* Filter bar */
 .declutter-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
-.declutter-filter { width: 260px; max-width: 100%; height: 30px; min-height: 30px; margin: 0; box-sizing: border-box; }
+.declutter-filter { width: 260px; max-width: 100%; margin: 0; box-sizing: border-box; }
 .declutter-tools-actions { display: flex; align-items: center; gap: 8px; }
-.declutter-tools .button { margin: 0; height: 30px; min-height: 30px; line-height: 28px; }
+.declutter-tools .button { margin: 0; }
 
 /* Table */
 .declutter-table { table-layout: fixed; width: 100%; border-collapse: collapse; }
 .declutter-table thead th { padding: 8px 12px; font-size: 13px; font-weight: 600; line-height: 1.4; text-transform: none; letter-spacing: 0; color: #1d2327; text-align: left; background: #f6f7f7; border-bottom: 1px solid #c3c4c7; }
-.declutter-table td { padding: 8px 12px; height: 44px; box-sizing: border-box; vertical-align: middle; font-size: 13px; line-height: 1.4; }
+.declutter-table td { padding: 8px 12px; height: auto; box-sizing: border-box; vertical-align: middle; font-size: 13px; line-height: 1.4; }
 .declutter-table td, .declutter-table th { overflow: hidden; }
 .declutter-col-item { width: 36%; }
 .declutter-col-id { width: 34%; }
@@ -69,7 +69,41 @@
 .declutter-row.depth-3 .declutter-title::before, .declutter-row.depth-4 .declutter-title::before { content: "\2014\00a0"; color: #a7aaad; }
 .declutter-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 10px; background: #f0f0f1; color: #646970; font-size: 11px; white-space: nowrap; }
 .declutter-locked { color: #646970; font-size: 12px; white-space: nowrap; }
-.declutter-rename { width: 100%; max-width: none; height: 30px; min-height: 30px; margin: 0; box-sizing: border-box; }
+.declutter-rename { width: 100%; max-width: none; margin: 0; box-sizing: border-box; }
+
+/* Sidebar order */
+.declutter-order-block { margin: 0 0 24px; }
+.declutter-order-block h3 { margin: 0 0 8px; padding: 0; font-size: 14px; line-height: 1.4; font-weight: 600; color: #1d2327; }
+.declutter-order-block > .description { margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: #50575e; }
+.declutter-order-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.declutter-order-toolbar .button { margin: 0; }
+.declutter-reset-order-form { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; white-space: nowrap; }
+.declutter-order { margin: 0; padding: 0; list-style: none; border: 1px solid #c3c4c7; background: #fff; }
+.declutter-order-item { display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 0; padding: 4px 8px; border-bottom: 1px solid #dcdcde; background: #fff; box-sizing: border-box; }
+.declutter-order-item:last-child { border-bottom: 0; }
+.declutter-order-item:hover { background: #f6f7f7; }
+.declutter-order-item:focus-within { background: #f0f6fc; }
+.declutter-order-item.is-separator { background: #f6f7f7; }
+.declutter-order-item.is-separator:hover,
+.declutter-order-item.is-separator:focus-within { background: #f0f0f1; }
+.declutter-handle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; margin: 0; padding: 0; border: 1px solid #787c82; border-radius: 2px; background: #f6f7f7; color: #1d2327; cursor: grab; box-shadow: none; }
+.declutter-handle:hover { background: #fff; border-color: #2271b1; color: #135e96; }
+.declutter-handle:focus { outline: none; }
+.declutter-handle:focus-visible { outline: 2px solid #2271b1; outline-offset: 1px; background: #fff; color: #135e96; }
+.declutter-handle:active { cursor: grabbing; }
+.declutter-handle .dashicons { width: 20px; height: 20px; font-size: 20px; line-height: 20px; }
+.declutter-order-label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.declutter-order-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 1.4; color: #1d2327; }
+.declutter-order-item.is-separator .declutter-order-title,
+.declutter-order-item.is-hidden .declutter-order-title { font-weight: 400; color: #50575e; }
+.declutter-order-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.declutter-move { display: inline-flex !important; align-items: center; justify-content: center; min-width: 80px; margin: 0 !important; white-space: nowrap; box-sizing: border-box; }
+.declutter-move:focus-visible { outline: 2px solid #2271b1; outline-offset: 1px; }
+.declutter-order-placeholder { box-sizing: border-box; margin: 0; border: 1px dashed #2271b1; background: #f0f6fc; visibility: visible !important; }
+.declutter-wrap .ui-sortable-helper { display: flex; background: #fff; border: 1px solid #2271b1; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12); z-index: 100; }
+.declutter-wrap.is-sorting .declutter-section,
+.declutter-wrap.is-sorting .declutter-collapse,
+.declutter-wrap.is-sorting .declutter-collapse-inner { overflow: visible; }
 
 /* Save bar */
 .declutter-submit { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; gap: 12px; margin: 0 0 24px; padding: 14px 0; background: #f0f0f1; border-top: 1px solid #dcdcde; }
@@ -85,7 +119,7 @@
 .declutter-tool-grid .declutter-field:last-of-type { margin-bottom: 16px; }
 .declutter-tool-grid textarea { width: 100%; box-sizing: border-box; min-height: 90px; }
 .declutter-tool-grid input[type="file"] { max-width: 100%; }
-.declutter-tool-grid .button { min-width: 140px; height: 30px; min-height: 30px; line-height: 28px; margin: 0; text-align: center; }
+.declutter-tool-grid .button { min-width: 140px; margin: 0; text-align: center; }
 
 /* Toggle switch. */
 .declutter-switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
@@ -100,22 +134,22 @@
 @media screen and (max-width: 782px) {
 	.declutter-options { grid-template-columns: 1fr; }
 	.declutter-head, .declutter-body { padding-left: 16px; padding-right: 16px; }
+	.declutter-submit { position: static; }
 	.declutter-table .declutter-col-id { display: none; }
 	.declutter-col-item { width: auto; }
+	.wp-core-ui .declutter-wrap .button,
 	.declutter-options select,
 	.declutter-filter,
-	.declutter-rename,
-	.declutter-tools .button,
-	.declutter-tool-grid .button {
-		height: auto;
-		min-height: 40px;
-		line-height: 2.2;
+	.declutter-rename {
+		min-height: 44px;
+		margin-bottom: 0;
 	}
-	.declutter-tools .button,
-	.declutter-tool-grid .button,
-	.declutter-expand-bar .button {
-		height: auto;
-		min-height: 40px;
-		line-height: 38px;
+	.declutter-handle {
+		width: 44px;
+		min-width: 44px;
+		height: 44px;
+		min-height: 44px;
 	}
+	.declutter-move { min-width: 80px; }
+	.declutter-order-item { min-height: 60px; padding-top: 8px; padding-bottom: 8px; }
 }

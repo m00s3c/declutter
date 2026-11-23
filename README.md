@@ -11,7 +11,7 @@ It is cosmetic only. No capabilities are removed and no screens are blocked. Hid
 - **Three independent sections**, each with its own on/off switch:
   - **Dashboard widgets**: hide any Dashboard widget, including the Welcome panel.
   - **Toolbar**: hide admin bar items in wp-admin and on the front end. Children go with their parent.
-  - **Admin menu**: hide or rename top-level and submenu entries.
+  - **Admin menu**: hide or rename top-level and submenu entries, and reorder top-level items. Submenus stay with their parent.
 - **Applies to everyone**, administrators included, or limit each section to chosen roles.
 - **Auto-discovery**: lists every widget, toolbar node and menu entry it has seen, with clean titles (no count bubbles or icons). "Refresh lists" rescans in one click.
 - **Sensible defaults** so upload and activate is enough:
@@ -39,7 +39,7 @@ It is cosmetic only. No capabilities are removed and no screens are blocked. Hid
 |-----------|-------------------------------|--------|
 | Dashboard | `do_meta_boxes` (dashboard)   | `remove_meta_box()`; Welcome panel via its action |
 | Toolbar   | `wp_before_admin_bar_render`  | `WP_Admin_Bar::remove_node()` |
-| Menu      | `admin_head`                  | CSS class on the entry; labels renamed in place. Access checks have already run, so nothing is blocked |
+| Menu      | `menu_order`, then `admin_head` | Top-level items reordered when the section is on and a custom order is saved. Hidden entries get a CSS class; labels are renamed in place. Access checks have already run, so nothing is blocked. |
 
 Detected items are stored in the `declutter_seen` option. Only users with `manage_options` update that list. Settings live in `declutter_settings`. Both are deleted on uninstall.
 

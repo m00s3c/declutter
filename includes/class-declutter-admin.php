@@ -51,7 +51,7 @@ final class Declutter_Admin {
 		add_filter( 'plugin_action_links_' . plugin_basename( DECLUTTER_FILE ), array( $this, 'action_links' ) );
 		add_action( 'admin_footer', array( $this, 'scan_return' ) );
 
-		foreach ( array( 'save', 'reset', 'export', 'import', 'rescan' ) as $action ) {
+		foreach ( array( 'save', 'reset', 'reset_order', 'export', 'import', 'rescan' ) as $action ) {
 			add_action( 'admin_post_declutter_' . $action, array( $this, 'handle_' . $action ) );
 		}
 	}
@@ -100,12 +100,18 @@ final class Declutter_Admin {
 			return;
 		}
 		wp_enqueue_style( 'declutter-admin', DECLUTTER_URL . 'assets/admin.css', array(), DECLUTTER_VERSION );
-		wp_enqueue_script( 'declutter-admin', DECLUTTER_URL . 'assets/admin.js', array(), DECLUTTER_VERSION, true );
+		wp_enqueue_script( 'declutter-admin', DECLUTTER_URL . 'assets/admin.js', array( 'jquery', 'jquery-ui-sortable' ), DECLUTTER_VERSION, true );
 		wp_localize_script(
 			'declutter-admin',
 			'declutterL10n',
 			array(
-				'confirmReset' => __( 'Reset all Declutter settings to the defaults?', 'declutter' ),
+				'confirmReset'      => __( 'Reset all Declutter settings to the defaults?', 'declutter' ),
+				'confirmResetOrder' => __( 'Reset the sidebar to the default order? Unsaved changes on this page will be lost.', 'declutter' ),
+				'orderChanged'      => __( 'Menu order changed. Save to keep it.', 'declutter' ),
+				'announceMoved'     => __( '%1$s moved %2$s. Position %3$s of %4$s.', 'declutter' ),
+				'directionUp'       => __( 'up', 'declutter' ),
+				'directionDown'     => __( 'down', 'declutter' ),
+				'hiddenBadge'       => __( 'Hidden', 'declutter' ),
 			)
 		);
 	}
@@ -185,6 +191,9 @@ final class Declutter_Admin {
 			$sec['items'] = $items;
 			if ( 'menu' === $section ) {
 				$sec['rename'] = $rename;
+				if ( isset( $in['order'] ) && is_array( $in['order'] ) ) {
+					$sec['order'] = Declutter::normalize_saved_order( $in['order'], Declutter::get_menu_default() );
+				}
 			}
 			$settings[ $section ] = $sec;
 		}
@@ -200,6 +209,17 @@ final class Declutter_Admin {
 		$this->guard( 'declutter_reset' );
 		Declutter::instance()->save_settings( Declutter::defaults() );
 		$this->back( 'reset' );
+	}
+
+	/**
+	 * Clear the saved sidebar order. Hide and rename choices stay as they are.
+	 */
+	public function handle_reset_order() {
+		$this->guard( 'declutter_reset_order' );
+		$settings                  = Declutter::instance()->get_settings();
+		$settings['menu']['order'] = array();
+		Declutter::instance()->save_settings( $settings );
+		$this->back( 'order_reset' );
 	}
 
 	/**
@@ -345,6 +365,7 @@ final class Declutter_Admin {
 		$messages = array(
 			'saved'        => array( 'success', __( 'Settings saved.', 'declutter' ) ),
 			'reset'        => array( 'success', __( 'Settings reset to the defaults.', 'declutter' ) ),
+			'order_reset'  => array( 'success', __( 'Menu order reset to the default.', 'declutter' ) ),
 			'imported'     => array( 'success', __( 'Settings imported.', 'declutter' ) ),
 			'scanned'      => array( 'success', __( 'Lists refreshed. Toolbar items that only appear on the front end of the site show up after you visit it while logged in.', 'declutter' ) ),
 			'import_error' => array( 'error', __( 'That file or text is not a valid Declutter export.', 'declutter' ) ),
@@ -356,6 +377,104 @@ final class Declutter_Admin {
 				esc_html( $messages[ $msg ][1] )
 			);
 		}
+	}
+
+	/**
+	 * Top-level sidebar rows in the saved order, with anything new appended.
+	 *
+	 * @param array $config Menu section settings.
+	 * @param array $seen   Detected menu items.
+	 * @return array[]
+	 */
+	private function menu_order_rows( array $config, array $seen ) {
+		$current = array();
+		$meta    = array();
+		foreach ( $seen as $id => $info ) {
+			$id     = (string) $id;
+			$parent = isset( $info['parent'] ) ? (string) $info['parent'] : '';
+			if ( '' !== $parent ) {
+				continue;
+			}
+			$current[]   = $id;
+			$separator   = ! empty( $info['separator'] ) || Declutter::is_separator_id( $id );
+			$original    = isset( $info['title'] ) && '' !== (string) $info['title'] ? (string) $info['title'] : $id;
+			if ( $separator ) {
+				$original = __( 'Separator', 'declutter' );
+			}
+			$label       = ( isset( $config['rename'][ $id ] ) && '' !== $config['rename'][ $id ] ) ? $config['rename'][ $id ] : $original;
+			$meta[ $id ] = array(
+				'label'     => $label,
+				'separator' => $separator,
+				'hidden'    => Declutter::instance()->is_hidden( 'menu', $id ),
+			);
+		}
+
+		$order = Declutter::merge_menu_order(
+			isset( $config['order'] ) && is_array( $config['order'] ) ? $config['order'] : array(),
+			$current
+		);
+		$rows  = array();
+		foreach ( $order as $id ) {
+			if ( ! isset( $meta[ $id ] ) ) {
+				continue;
+			}
+			$rows[] = array(
+				'id'        => $id,
+				'label'     => $meta[ $id ]['label'],
+				'separator' => $meta[ $id ]['separator'],
+				'hidden'    => $meta[ $id ]['hidden'],
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * Drag-and-drop order for top-level sidebar items.
+	 *
+	 * @param array $config Menu section settings.
+	 * @param array $seen   Detected menu items.
+	 */
+	private function render_menu_order( array $config, array $seen ) {
+		$rows = $this->menu_order_rows( $config, $seen );
+		if ( empty( $rows ) ) {
+			return;
+		}
+		$last = count( $rows ) - 1;
+		?>
+		<div class="declutter-order-block">
+			<h3><?php esc_html_e( 'Sidebar order', 'declutter' ); ?></h3>
+			<p class="description" id="declutter-order-help">
+				<?php esc_html_e( 'Drag a handle, or use Up and Down. With a handle focused, the arrow keys move that item. Submenus stay with their parent, and items added later go to the end. Applied only while this section is enabled.', 'declutter' ); ?>
+			</p>
+			<div class="declutter-order-toolbar">
+				<button type="submit" class="button button-secondary" form="declutter-reset-order"><?php esc_html_e( 'Reset to default order', 'declutter' ); ?></button>
+			</div>
+			<noscript>
+				<p class="description"><?php esc_html_e( 'Drag and drop and the arrow buttons need JavaScript. Resetting a saved order does not.', 'declutter' ); ?></p>
+			</noscript>
+			<ul class="declutter-order" aria-label="<?php esc_attr_e( 'Sidebar order', 'declutter' ); ?>" aria-describedby="declutter-order-help">
+				<?php foreach ( $rows as $i => $row ) : ?>
+					<li class="declutter-order-item<?php echo $row['separator'] ? ' is-separator' : ''; ?><?php echo $row['hidden'] ? ' is-hidden' : ''; ?>" data-id="<?php echo esc_attr( $row['id'] ); ?>" data-label="<?php echo esc_attr( $row['label'] ); ?>">
+						<button type="button" class="declutter-handle" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: menu item name */ __( 'Drag to reorder %s', 'declutter' ), $row['label'] ) ); ?>">
+							<span class="dashicons dashicons-menu" aria-hidden="true"></span>
+						</button>
+						<span class="declutter-order-label">
+							<span class="declutter-order-title"><?php echo esc_html( $row['label'] ); ?></span>
+							<?php if ( $row['hidden'] ) : ?>
+								<span class="declutter-badge"><?php esc_html_e( 'Hidden', 'declutter' ); ?></span>
+							<?php endif; ?>
+						</span>
+						<span class="declutter-order-actions">
+							<button type="button" class="button button-secondary declutter-move declutter-move-up" <?php disabled( 0 === $i ); ?> aria-label="<?php echo esc_attr( sprintf( /* translators: %s: menu item name */ __( 'Move %s up', 'declutter' ), $row['label'] ) ); ?>"><?php esc_html_e( 'Up', 'declutter' ); ?></button>
+							<button type="button" class="button button-secondary declutter-move declutter-move-down" <?php disabled( $last === $i ); ?> aria-label="<?php echo esc_attr( sprintf( /* translators: %s: menu item name */ __( 'Move %s down', 'declutter' ), $row['label'] ) ); ?>"><?php esc_html_e( 'Down', 'declutter' ); ?></button>
+						</span>
+						<input type="hidden" name="declutter[menu][order][]" value="<?php echo esc_attr( $row['id'] ); ?>">
+					</li>
+				<?php endforeach; ?>
+			</ul>
+			<p id="declutter-order-live" class="screen-reader-text" aria-live="polite"></p>
+		</div>
+		<?php
 	}
 
 	/**
@@ -380,7 +499,7 @@ final class Declutter_Admin {
 			),
 			'menu'      => array(
 				'title' => __( 'Admin menu', 'declutter' ),
-				'desc'  => __( 'Hide or rename entries in the left sidebar. Hidden pages still open by direct URL; nothing is blocked.', 'declutter' ),
+				'desc'  => __( 'Hide, rename or reorder entries in the left sidebar. Hidden pages still open by direct URL; nothing is blocked. A saved order is used only while this section is enabled.', 'declutter' ),
 				'empty' => __( 'No menu items detected yet. Reload this page.', 'declutter' ),
 			),
 		);
@@ -465,6 +584,12 @@ final class Declutter_Admin {
 									</div>
 								</fieldset>
 							</div>
+
+							<?php
+							if ( 'menu' === $key ) {
+								$this->render_menu_order( $sec, $seen[ $key ] );
+							}
+							?>
 
 							<?php if ( empty( $rows ) ) : ?>
 								<p class="declutter-empty"><?php echo esc_html( $meta['empty'] ); ?></p>
@@ -576,7 +701,7 @@ final class Declutter_Admin {
 					</div>
 					<div>
 						<h3><?php esc_html_e( 'Reset', 'declutter' ); ?></h3>
-						<p class="description"><?php esc_html_e( 'Go back to the built-in defaults: Dashboard keeps only At a Glance and Wordfence, toolbar drops the WordPress logo, comments bubble and known plugin clutter, menu untouched.', 'declutter' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Go back to the built-in defaults: Dashboard keeps only At a Glance and Wordfence, toolbar drops the WordPress logo, comments bubble and known plugin clutter, menu visibility and order left as WordPress ships them.', 'declutter' ); ?></p>
 						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="declutter-reset-form">
 							<input type="hidden" name="action" value="declutter_reset">
 							<?php wp_nonce_field( 'declutter_reset' ); ?>
@@ -587,6 +712,10 @@ final class Declutter_Admin {
 					</div>
 				</div>
 			</div>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="declutter-reset-order" class="declutter-reset-order-form" aria-hidden="true">
+				<input type="hidden" name="action" value="declutter_reset_order">
+				<?php wp_nonce_field( 'declutter_reset_order' ); ?>
+			</form>
 		</div>
 		<script>
 		( function () {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Core: settings storage, item discovery and the hide logic.
+ * Core: settings storage, item discovery, sidebar order and the hide logic.
  *
  * Everything here is cosmetic. Nothing removes capabilities or blocks a
  * screen: hidden menu entries still open by direct URL.
@@ -36,6 +36,13 @@ final class Declutter {
 	private $settings = null;
 
 	/**
+	 * Top-level menu slugs in WordPress's order, captured before Declutter sorts them.
+	 *
+	 * @var string[]|null
+	 */
+	private $raw_menu_order = null;
+
+	/**
 	 * Get the instance.
 	 *
 	 * @return Declutter
@@ -55,7 +62,11 @@ final class Declutter {
 		add_action( 'do_meta_boxes', array( $this, 'handle_dashboard' ), PHP_INT_MAX, 2 );
 		// Toolbar: last stop before the admin bar renders (admin and front end).
 		add_action( 'wp_before_admin_bar_render', array( $this, 'handle_toolbar' ), PHP_INT_MAX );
-		// Menu: after access checks, before the sidebar is printed.
+		// Menu order: WordPress sorts the sidebar after admin_menu. Submenus are left alone.
+		add_filter( 'custom_menu_order', array( $this, 'enable_custom_menu_order' ) );
+		add_filter( 'menu_order', array( $this, 'remember_menu_order' ), 0 );
+		add_filter( 'menu_order', array( $this, 'filter_menu_order' ), 1000 );
+		// Menu hide/rename: after access checks, before the sidebar is printed.
 		add_action( 'admin_head', array( $this, 'handle_menu' ), 0 );
 	}
 
@@ -107,6 +118,7 @@ final class Declutter {
 				'smart'     => false,
 				'items'     => array(),
 				'rename'    => array(),
+				'order'     => array(),
 			),
 		);
 	}
@@ -274,12 +286,87 @@ final class Declutter {
 						}
 					}
 				}
+
+				$sec['order'] = array();
+				if ( isset( $in['order'] ) && is_array( $in['order'] ) ) {
+					$sec['order'] = self::clean_order_list( $in['order'] );
+				}
 			}
 
 			$out[ $section ] = $sec;
 		}
 
 		$out['version'] = 1;
+		return $out;
+	}
+
+	/**
+	 * Clean a list of top-level menu slugs. Submenu ids and duplicates are dropped.
+	 *
+	 * @param array $order Raw slugs.
+	 * @return string[]
+	 */
+	public static function clean_order_list( array $order ) {
+		$clean = array();
+		foreach ( $order as $id ) {
+			$id = self::clean_id( $id );
+			if ( '' === $id || false !== strpos( $id, ' > ' ) || isset( $clean[ $id ] ) ) {
+				continue;
+			}
+			$clean[ $id ] = $id;
+		}
+		return array_values( $clean );
+	}
+
+	/**
+	 * Order to store. An arrangement that matches WordPress's own order is stored
+	 * as an empty list so items added later keep their natural positions.
+	 *
+	 * @param array $order   Submitted slugs.
+	 * @param array $default Slugs in WordPress's order.
+	 * @return string[]
+	 */
+	public static function normalize_saved_order( array $order, array $default ) {
+		$clean   = self::clean_order_list( $order );
+		$default = self::clean_order_list( $default );
+		if ( $clean === $default ) {
+			return array();
+		}
+		return $clean;
+	}
+
+	/**
+	 * Saved slugs first, then anything new, in the relative order of $current.
+	 * Slugs that are no longer on the site are ignored.
+	 *
+	 * @param array $saved   Stored order. Empty means "do not reorder".
+	 * @param array $current Slugs currently on the site, in default order.
+	 * @return string[]
+	 */
+	public static function merge_menu_order( array $saved, array $current ) {
+		$sequence = array();
+		$present  = array();
+		foreach ( self::clean_order_list( $current ) as $id ) {
+			$present[ $id ] = true;
+			$sequence[]     = $id;
+		}
+
+		$out    = array();
+		$placed = array();
+		foreach ( self::clean_order_list( $saved ) as $id ) {
+			if ( ! isset( $present[ $id ] ) ) {
+				continue;
+			}
+			$placed[ $id ] = true;
+			$out[]         = $id;
+		}
+		foreach ( $sequence as $id ) {
+			if ( isset( $placed[ $id ] ) ) {
+				continue;
+			}
+			$placed[ $id ] = true;
+			$out[]         = $id;
+		}
 		return $out;
 	}
 
@@ -584,13 +671,132 @@ final class Declutter {
 	}
 
 	/**
+	 * Whether a menu slug is one of WordPress's sidebar separators.
+	 *
+	 * @param string $id Menu slug.
+	 * @return bool
+	 */
+	public static function is_separator_id( $id ) {
+		return (bool) preg_match( '/^separator(?:\d+|-.*)?$/', (string) $id );
+	}
+
+	/**
+	 * Top-level slugs in the order they appear in a menu array.
+	 *
+	 * @param array $menu Admin menu.
+	 * @return string[]
+	 */
+	public static function menu_slugs( array $menu ) {
+		$slugs = array();
+		foreach ( $menu as $item ) {
+			if ( ! is_array( $item ) || ! isset( $item[2] ) ) {
+				continue;
+			}
+			$slugs[] = $item[2];
+		}
+		return self::clean_order_list( $slugs );
+	}
+
+	/**
+	 * Turn custom ordering on when this section actually has an order to apply.
+	 *
+	 * @param bool $enabled Whether another callback already enabled it.
+	 * @return bool
+	 */
+	public function enable_custom_menu_order( $enabled ) {
+		return (bool) $enabled || $this->should_reorder_menu();
+	}
+
+	/**
+	 * Remember WordPress's order before any plugin rearranges the list.
+	 *
+	 * @param array $menu_order Menu slugs.
+	 * @return array
+	 */
+	public function remember_menu_order( $menu_order ) {
+		if ( is_array( $menu_order ) ) {
+			$this->raw_menu_order = array_values( $menu_order );
+		}
+		return $menu_order;
+	}
+
+	/**
+	 * Apply the saved top-level order. Unknown items keep their relative order
+	 * and follow the saved ones. Missing slugs are skipped.
+	 *
+	 * @param array $menu_order Menu slugs, possibly already filtered.
+	 * @return array
+	 */
+	public function filter_menu_order( $menu_order ) {
+		if ( ! $this->should_reorder_menu() || ! is_array( $menu_order ) ) {
+			return $menu_order;
+		}
+		$base   = is_array( $this->raw_menu_order ) ? $this->raw_menu_order : $menu_order;
+		$merged = self::merge_menu_order( $this->get_settings()['menu']['order'], $base );
+		return $merged ? $merged : $menu_order;
+	}
+
+	/**
+	 * Custom order is part of the menu section: off, or limited to other roles,
+	 * means the sidebar is left in WordPress's order.
+	 *
+	 * @return bool
+	 */
+	private function should_reorder_menu() {
+		if ( ! $this->applies( 'menu' ) ) {
+			return false;
+		}
+		$order = $this->get_settings()['menu']['order'];
+		return is_array( $order ) && ! empty( $order );
+	}
+
+	/**
+	 * Last seen WordPress order for the settings screen (separators WordPress
+	 * itself removes are not included).
+	 *
+	 * @return string[]
+	 */
+	public static function get_menu_default() {
+		$seen = get_option( self::SEEN_OPTION, array() );
+		if ( ! is_array( $seen ) || empty( $seen['menu_default'] ) || ! is_array( $seen['menu_default'] ) ) {
+			return array();
+		}
+		return self::clean_order_list( $seen['menu_default'] );
+	}
+
+	/**
+	 * Store the default order when Declutter is not currently sorting the menu.
+	 *
+	 * @param string[] $slugs Slugs.
+	 */
+	private function store_menu_default( array $slugs ) {
+		$slugs = self::clean_order_list( $slugs );
+		if ( empty( $slugs ) ) {
+			return;
+		}
+		$seen = get_option( self::SEEN_OPTION, array() );
+		$seen = is_array( $seen ) ? $seen : array();
+		$old  = isset( $seen['menu_default'] ) && is_array( $seen['menu_default'] ) ? self::clean_order_list( $seen['menu_default'] ) : array();
+		if ( $old === $slugs ) {
+			return;
+		}
+		$seen['menu_default'] = $slugs;
+		update_option( self::SEEN_OPTION, $seen, false );
+	}
+
+	/**
 	 * Capture, rename and hide menu entries. Hidden entries get a CSS class
 	 * instead of being removed, so access checks and parent links are untouched.
+	 * Order is applied earlier, via the menu_order filter.
 	 */
 	public function handle_menu() {
 		global $menu, $submenu;
 		if ( ! is_array( $menu ) ) {
 			return;
+		}
+
+		if ( ! $this->should_reorder_menu() && $this->can_capture() ) {
+			$this->store_menu_default( self::menu_slugs( $menu ) );
 		}
 
 		if ( $this->can_capture() ) {
@@ -599,12 +805,15 @@ final class Declutter {
 				if ( ! isset( $item[2] ) ) {
 					continue;
 				}
-				$slug         = self::clean_id( $item[2] );
-				$is_sep       = isset( $item[4] ) && false !== strpos( (string) $item[4], 'wp-menu-separator' );
+				$slug           = self::clean_id( $item[2] );
+				$is_sep         = isset( $item[4] ) && false !== strpos( (string) $item[4], 'wp-menu-separator' );
 				$found[ $slug ] = array(
 					'title'  => $is_sep ? __( '— Separator —', 'declutter' ) : self::clean_title( $item[0], $slug ),
 					'parent' => '',
 				);
+				if ( $is_sep ) {
+					$found[ $slug ]['separator'] = true;
+				}
 				if ( isset( $submenu[ $item[2] ] ) && is_array( $submenu[ $item[2] ] ) ) {
 					foreach ( $submenu[ $item[2] ] as $sub ) {
 						if ( ! isset( $sub[2] ) ) {
